@@ -8,7 +8,7 @@ if "%~1"=="" (
 
 set "ORIGIN=%~1"
 set "DESTINATION=extract\csv\spells.csv"
-set "MERGESCRIPT=scripts\extract-spells.js"
+set "MERGESCRIPT=extract\scripts\extract-spells.js"
 
 cd /d "%~dp0"
 
