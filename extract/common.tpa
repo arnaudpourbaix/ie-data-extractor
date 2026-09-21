@@ -1,0 +1,38 @@
+// Returns (in RET item) the ITM resref sitting in a given CRE item slot,
+// or "" if the slot is empty. slot is the 0-based index into the "item
+// slots" array described in cre_v1.htm
+// 0=Helmet
+// 1=Armor
+// 2=Shield
+// 3=Gloves
+// 4=L.Ring
+// 5=R.Ring
+// 6=Amulet
+// 7=Belt
+// 8=Boots
+// 9-12=Weapon1-4
+// 13-16=Quiver1-4
+// 17=Cloak
+// 18-20=Quick item 1-3
+// 21-36=Inventory 1-16
+// 37=Magic weapon
+// 38=Selected weapon
+// 39=Selected weapon ability
+// Reads the item slots/items table offsets from the header (0x2b8/0x2bc)
+// instead of assuming a fixed layout, since their position shifts with
+// the creature's known-spells/mem-spell/effects counts.
+DEFINE_PATCH_FUNCTION GET_CRE_ITEM_IN_SLOT
+    INT_VAR
+        slot = 0
+    RET
+        item
+BEGIN
+    READ_LONG 0x2b8 slots_offset
+    READ_LONG 0x2bc items_offset
+    READ_SHORT (slots_offset + (slot * 2)) item_index
+    PATCH_IF (item_index = 65535) BEGIN
+        SPRINT item ""
+    END ELSE BEGIN
+        READ_ASCII (items_offset + (item_index * 0x14)) item
+    END
+END
