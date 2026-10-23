@@ -11,7 +11,7 @@ NO_LOG_RECORD
 DESIGNATED 1
 COPY ~extract/blank~ ~extract/csv/source.csv~
 
-APPEND_OUTER ~extract/csv/source.csv~ ~file;general;race;class;anim;deathvar;dialog;level;gender;sex;allegiance;overrideScript;classScript;raceScript;generalScript;defaultScript;helmet;shield;lring;rring;amulet;weapon1;weapon2;weapon3;weapon4;xpv;name~
+APPEND_OUTER ~extract/csv/source.csv~ ~file;general;race;class;anim;deathvar;dialog;level;gender;sex;allegiance;overrideScript;classScript;raceScript;generalScript;defaultScript;helmet;shield;lring;rring;amulet;weapon1;weapon2;weapon3;weapon4;xpv;hp;thac0;apr;str;name~
 COPY_EXISTING_REGEXP GLOB ~^.+\.cre$~ ~override~
     PATCH_IF (%SOURCE_SIZE% > 0x2d3) BEGIN
         READ_LONG 0x14 xpv
@@ -31,6 +31,11 @@ COPY_EXISTING_REGEXP GLOB ~^.+\.cre$~ ~override~
         READ_ASCII 0x258 raceScript
         READ_ASCII 0x260 generalScript
         READ_ASCII 0x268 defaultScript
+        READ_SHORT 0x26 hp
+        READ_BYTE 0x52 thac0
+        READ_BYTE 0x53 apr
+        READ_BYTE 0x238 str
+        READ_BYTE 0x239 strEx
         LOOKUP_IDS_SYMBOL_OF_INT general "general" %g%
         LOOKUP_IDS_SYMBOL_OF_INT race "race" %r%
         LOOKUP_IDS_SYMBOL_OF_INT class "class" %c%
@@ -127,8 +132,12 @@ COPY_EXISTING_REGEXP GLOB ~^.+\.cre$~ ~override~
             PATCH_PRINT ~Missing script "%defaultScript%"~
             SPRINT defaultScript ""
         END
+        SPRINT strength "%str%"
+        PATCH_IF str = 18 BEGIN
+            SPRINT strength "%str%/%strEx%"
+        END
         INNER_ACTION BEGIN
-            APPEND_OUTER ~extract/csv/source.csv~ ~%SOURCE_RES%;%general%;%race%;%class%;%anim%;%deathvar%;%dialog%;%level%;%gender%;%sex%;%allegiance%;%overrideScript%;%classScript%;%raceScript%;%generalScript%;%defaultScript%;%helmet%;%shield%;%lring%;%rring%;%amulet%;%weapon1%;%weapon2%;%weapon3%;%weapon4%;%xpv%;%name%~
+            APPEND_OUTER ~extract/csv/source.csv~ ~%SOURCE_RES%;%general%;%race%;%class%;%anim%;%deathvar%;%dialog%;%level%;%gender%;%sex%;%allegiance%;%overrideScript%;%classScript%;%raceScript%;%generalScript%;%defaultScript%;%helmet%;%shield%;%lring%;%rring%;%amulet%;%weapon1%;%weapon2%;%weapon3%;%weapon4%;%xpv%;%hp%;%thac0%;%apr%;%strength%;%name%~
         END
     END
 BUT_ONLY
@@ -186,7 +195,7 @@ COPY_EXISTING_REGEXP GLOB ~^.+\.itm$~ ~override~
                 READ_LONG (fx_off + 0x24 + (0x14 * fx_type) + ((abil_fx_idx + index2) * (0x30 + (0xd8 * fx_type)))) o_savingthrow
                 READ_LONG (fx_off + 0x28 + (0x14 * fx_type) + ((abil_fx_idx + index2) * (0x30 + (0xd8 * fx_type)))) o_savebonus
                 READ_LONG (fx_off + 0x2c + (0x14 * fx_type) + ((abil_fx_idx + index2) * (0x30 + (0xd8 * fx_type)))) o_special
-                PATCH_IF (o_opcode = 341) BEGIN
+                PATCH_IF (o_opcode = 287) BEGIN
                     INNER_ACTION BEGIN
                         APPEND_OUTER ~extract/csv/items.csv~ ~%SOURCE_FILE%;%o_opcode%;%o_parameter1%;%o_parameter2%;%o_resource%;%name%~
                     END
@@ -258,8 +267,8 @@ BEGIN ~check spells~
 NO_LOG_RECORD
 DESIGNATED 4
 COPY ~extract/blank~ ~extract/csv/spells_check.csv~
-
-COPY_EXISTING_REGEXP GLOB ~^.+\.spl$~ ~override~
+COPY_EXISTING_REGEXP GLOB ~sp\(in\|cl\|pr\|wi\)[0-9][0-9][0-9]\.spl~ ~override~
+    // COPY_EXISTING_REGEXP GLOB ~spwi943.spl~ ~override~
     PATCH_IF ("%version%" STRING_COMPARE_CASE "V2.0" = 0) BEGIN  // iwd2, spl 2.0
         SET min_size = 0x82
     END ELSE BEGIN
@@ -278,6 +287,10 @@ COPY_EXISTING_REGEXP GLOB ~^.+\.spl$~ ~override~
         END ELSE BEGIN
             READ_STRREF 0x08 name
         END
+        PATCH_IF ("%name%" STRING_COMPARE_CASE "<Invalid Strref -1>") = 0 BEGIN
+            SPRINT name ""
+        END
+        SET bypassResistance = 1
         FOR (index = "-1"; index < abil_num; ++index) BEGIN  // we start at -1 for global effects
             PATCH_IF (index < 0) BEGIN  // if loop through globals needed
                 SET abil_fx_idx = 0  // start with effect 0 since we're in the global loop
@@ -293,15 +306,36 @@ COPY_EXISTING_REGEXP GLOB ~^.+\.spl$~ ~override~
                 READ_SHORT (fx_off + (0x08 * fx_type) + ((abil_fx_idx + index2) * (0x30 + (0xd8 * fx_type)))) o_opcode
                 READ_LONG (fx_off + 0x04 + (0x10 * fx_type) + ((abil_fx_idx + index2) * (0x30 + (0xd8 * fx_type)))) o_parameter1
                 READ_LONG (fx_off + 0x08 + (0x10 * fx_type) + ((abil_fx_idx + index2) * (0x30 + (0xd8 * fx_type)))) o_parameter2
+                READ_BYTE (fx_off + 0x0d + (0x10 * fx_type) + ((abil_fx_idx + index2) * (0x30 + (0xd8 * fx_type)))) o_dispel
                 READ_ASCII (fx_off + 0x14 + (0x10 * fx_type) + ((abil_fx_idx + index2) * (0x30 + (0xd8 * fx_type)))) o_resource
-                PATCH_IF o_opcode = 341 BEGIN
-                    INNER_ACTION BEGIN
-                        APPEND_OUTER ~extract/csv/spells_check.csv~ ~%SOURCE_FILE%;%o_parameter1%;%o_parameter2%;%o_resource%;%name%~
-                    END
-                END  // end patch_if for a matched effect
+                // PATCH_PRINT ~%SOURCE_FILE% opcode %o_opcode% dispel:%o_dispel%~
+                PATCH_IF bypassResistance = 1 AND o_dispel = 1 BEGIN
+                    bypassResistance = 0
+                END
+                // PATCH_IF o_opcode = 324 BEGIN
+                // INNER_ACTION BEGIN
+                // APPEND_OUTER ~extract/csv/spells_check.csv~ ~%SOURCE_FILE%;%o_parameter1%;%o_parameter2%;%o_resource%;%o_dispel%;%name%~
+                // END
+                // END
             END
             // end of the for loop through effects
         END
         // end loop through effects on ability
+        PATCH_IF bypassResistance = 1 BEGIN
+            INNER_ACTION BEGIN
+                APPEND_OUTER ~extract/csv/spells_check.csv~ ~%SOURCE_FILE%;%name%~
+            END
+        END
     END
 BUT_ONLY_IF_IT_CHANGES
+
+BEGIN ~Dead magic areas~
+NO_LOG_RECORD
+DESIGNATED 4
+COPY_EXISTING_REGEXP GLOB ~^.+\.are$~ ~override~
+    READ_LONG 0x14 flags
+    PATCH_IF (flags BAND 4) BEGIN
+        PATCH_PRINT ~Dead magic: %SOURCE_RES%~
+        // or append an !AreaCheck("%SOURCE_RES%") line to a .baf you compile afterward
+    END
+BUT_ONLY
